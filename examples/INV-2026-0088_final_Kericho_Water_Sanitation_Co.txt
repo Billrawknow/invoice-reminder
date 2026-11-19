@@ -1,0 +1,32 @@
+TO:       procurement@kewasco.example.com
+PHONE:    0711 000 101
+SUBJECT:  Final reminder: Invoice INV-2026-0088, KES 214,000 due 30 Sep
+========================================================================
+
+Attn: The Procurement Officer, Kericho Water & Sanitation Co.
+
+Dear Sir/Madam,
+
+Invoice INV-2026-0088 was due on Wednesday 30 September 2026 and is now 50 days overdue. We have not yet received payment.
+
+  Goods supplied: 40 x 4-inch PVC pipes, 12 gate valves
+  Invoice amount: KES 214,000
+  Balance due:    KES 214,000
+
+You can pay by:
+  M-Pesa Paybill 123456, Account INV-2026-0088
+  Bank: Equity Bank, Kericho Branch, A/C 0000000000
+
+Please settle the balance by Thursday 26 November 2026, or call me on 0712 345 678 before then to agree a payment plan. Until the account is up to date we may have to pause further supplies on credit. We value your business and would like to keep serving you.
+
+Thank you for buying from us.
+
+Kind regards,
+Accounts Office
+Mlimani Hardware & Building Supplies
+0712 345 678 | accounts@example.com
+
+========================================================================
+SMS / WHATSAPP VERSION (134 characters)
+------------------------------------------------------------------------
+Mlimani Hardware: inv INV-2026-0088 bal KES 214,000 due 30 Sep. Pay via Paybill 123456 Acc INV-2026-0088. Paid? Send ref. 0712 345 678

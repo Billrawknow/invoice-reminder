@@ -1,0 +1,34 @@
+TO:       bursar@stmarys.example.com
+PHONE:    0733 000 103
+SUBJECT:  Second reminder: Invoice INV-2026-0104, KES 66,800 due 5 Nov
+========================================================================
+
+Attn: The Bursar, St. Mary's Girls Secondary School
+
+Dear Sir/Madam,
+
+We have not yet received payment for invoice INV-2026-0104, which was due on Thursday 5 November 2026 and is now 14 days overdue.
+
+  Goods supplied: Roofing sheets (gauge 30) x 45, ridges
+  Invoice amount: KES 126,800
+  Balance due:    KES 66,800
+
+Thank you for the KES 60,000 you have already paid.
+
+You can pay by:
+  M-Pesa Paybill 123456, Account INV-2026-0104
+  Bank: Equity Bank, Kericho Branch, A/C 0000000000
+
+If something on the invoice is not right, or you would like to pay in instalments, please call me on 0712 345 678 and we will agree a plan that works for you. If you have already paid, please send us the reference so we can update our records.
+
+Thank you for buying from us.
+
+Kind regards,
+Accounts Office
+Mlimani Hardware & Building Supplies
+0712 345 678 | accounts@example.com
+
+========================================================================
+SMS / WHATSAPP VERSION (132 characters)
+------------------------------------------------------------------------
+Mlimani Hardware: inv INV-2026-0104 bal KES 66,800 due 5 Nov. Pay via Paybill 123456 Acc INV-2026-0104. Paid? Send ref. 0712 345 678

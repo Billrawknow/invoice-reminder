@@ -1,0 +1,30 @@
+TO:       aickapsoit@example.com
+PHONE:    0720 000 106
+SUBJECT:  Friendly reminder: Invoice INV-2026-0109, KES 32,000 due 12 Nov
+========================================================================
+
+Dear Pastor Kirui,
+
+I hope you are well. This is a friendly reminder that invoice INV-2026-0109 was due on Thursday 12 November 2026 and is now 7 days overdue.
+
+  Goods supplied: Wheelbarrows x 2, 10 bags cement
+  Invoice amount: KES 32,000
+  Balance due:    KES 32,000
+
+You can pay by:
+  M-Pesa Paybill 123456, Account INV-2026-0109
+  Bank: Equity Bank, Kericho Branch, A/C 0000000000
+
+If you have already paid, thank you, and please ignore this message. Kindly send us the M-Pesa or bank reference so we can update our records.
+
+Thank you for buying from us.
+
+Kind regards,
+Accounts Office
+Mlimani Hardware & Building Supplies
+0712 345 678 | accounts@example.com
+
+========================================================================
+SMS / WHATSAPP VERSION (150 characters)
+------------------------------------------------------------------------
+Mlimani Hardware: Hi Pastor Kirui, inv INV-2026-0109 bal KES 32,000 due 12 Nov. Pay via Paybill 123456 Acc INV-2026-0109. Paid? Send ref. 0712 345 678

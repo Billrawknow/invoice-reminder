@@ -1,0 +1,11 @@
+# secrets
+.env
+
+# client data and run output (never commit a real client's invoices)
+Outbox/
+reminder_history.csv
+automation.log
+
+__pycache__/
+*.pyc
+~$*.xlsx

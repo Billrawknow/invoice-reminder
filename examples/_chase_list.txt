@@ -1,0 +1,28 @@
+Mlimani Hardware & Building Supplies: overdue invoices on Thursday 19 November 2026
+
+7 overdue invoice(s), KES 394,050 outstanding.
+
+ Days  Invoice         Client                                    Balance  Stage
+------------------------------------------------------------------------------------
+   50  INV-2026-0088   Kericho Water & Sanitation Co.        KES 214,000  Final reminder
+   40  INV-2026-0101   Kiptoo Builders Ltd                    KES 48,500  Final reminder
+   20  INV-2026-0106   Chebet Plumbing Works                  KES 15,600  Second reminder
+   14  INV-2026-0110   Rono & Sons Contractors                 KES 9,800  Second reminder
+   14  INV-2026-0104   St. Mary's Girls Secondary School      KES 66,800  Second reminder
+    7  INV-2026-0109   AIC Church Kapsoit                     KES 32,000  Friendly reminder
+    4  INV-2026-0107   Joseph Langat                           KES 7,350  Friendly reminder
+
+New drafts in Outbox today: 7
+  - INV-2026-0088_final_Kericho_Water_Sanitation_Co.txt
+  - INV-2026-0101_final_Kiptoo_Builders_Ltd.txt
+  - INV-2026-0106_second_Chebet_Plumbing_Works.txt
+  - INV-2026-0110_second_Rono_Sons_Contractors.txt
+  - INV-2026-0104_second_St_Mary_s_Girls_Secondary_School.txt
+  - INV-2026-0109_first_AIC_Church_Kapsoit.txt
+  - INV-2026-0107_first_Joseph_Langat.txt
+
+ROWS TO FIX IN THE SHEET (skipped):
+  - Row 14 (Tea Hotel Renovations): due date is empty
+
+How to use: open each new draft, send the email or copy the SMS into WhatsApp,
+then move the file into Outbox/Sent so you know it has gone.
