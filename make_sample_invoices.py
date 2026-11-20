@@ -4,8 +4,11 @@ Creates invoices.xlsx: a sample credit-sales sheet for a hardware shop.
 The columns match what QuoteKit keeps for each invoice, so a QuoteKit export
 can replace this sheet later without changing the reminder script.
 
-    python make_sample_invoices.py
+    python make_sample_invoices.py                  # invoices.xlsx with 13 sample invoices
+    python make_sample_invoices.py --blank out.xlsx # empty template for a client (headers + dropdown)
 """
+
+import argparse
 
 from datetime import date
 from pathlib import Path
@@ -48,12 +51,12 @@ ROWS = [
 ]
 
 
-def main():
+def build(out, rows):
     book = Workbook()
     sheet = book.active
     sheet.title = "Invoices"
     sheet.append(HEADER)
-    for row in ROWS:
+    for row in rows:
         sheet.append(row)
 
     navy = PatternFill("solid", fgColor="1F4E79")
@@ -64,7 +67,7 @@ def main():
     widths = [15, 34, 22, 36, 14, 40, 15, 13, 12, 7]
     for col, width in zip("ABCDEFGHIJ", widths):
         sheet.column_dimensions[col].width = width
-    for row in sheet.iter_rows(min_row=2):
+    for row in sheet.iter_rows(min_row=2, max_row=max(len(rows) + 1, 500)):
         row[6].number_format = row[7].number_format = "#,##0"
         row[8].number_format = "dd/mm/yyyy"
     sheet.freeze_panes = "A2"
@@ -73,9 +76,20 @@ def main():
     sheet.add_data_validation(yes_no)
     yes_no.add("J2:J1000")
 
-    out = Path(__file__).resolve().parent / "invoices.xlsx"
     book.save(out)
-    print(f"Saved {out.name} with {len(ROWS)} invoices.")
+    return out
+
+
+def main():
+    p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    p.add_argument("--blank", metavar="FILE", type=Path, help="write an empty client template instead")
+    args = p.parse_args()
+    if args.blank:
+        build(args.blank, [])
+        print(f"Saved blank template {args.blank}")
+    else:
+        out = build(Path(__file__).resolve().parent / "invoices.xlsx", ROWS)
+        print(f"Saved {out.name} with {len(ROWS)} invoices.")
 
 
 if __name__ == "__main__":

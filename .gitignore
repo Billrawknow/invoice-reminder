@@ -1,10 +1,17 @@
-# secrets
+# settings with passwords (config.env.example is the template)
+config.env
 .env
 
 # client data and run output (never commit a real client's invoices)
 Outbox/
 reminder_history.csv
 automation.log
+
+# build output
+build/
+dist/
+release/
+*.spec
 
 __pycache__/
 *.pyc

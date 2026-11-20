@@ -2,54 +2,55 @@
 title Invoice Reminder - Setup
 cd /d "%~dp0"
 echo.
-echo  Invoice Reminder - one-time setup
-echo  =================================
+echo  Invoice Reminder - setup
+echo  ========================
 echo.
 
-where py >nul 2>nul
-if %errorlevel%==0 (set "PY=py -3") else (set "PY=python")
+if exist "InvoiceReminder.exe" (
+  set APP="%~dp0InvoiceReminder.exe"
+  goto :settings
+)
+
+REM Developer copy (no .exe): use Python.
+set PY=python
+where py >nul 2>nul && set PY=py -3
 %PY% --version >nul 2>nul
 if errorlevel 1 (
   echo  Python is not installed. Install it from https://www.python.org/downloads/
-  echo  ^(tick "Add python.exe to PATH" during installation^), then run this setup again.
-  echo.
+  echo  ^(tick "Add python.exe to PATH"^), then run setup again.
   pause
   exit /b 1
 )
-
-echo  [1/3] Installing what the tool needs...
+echo  Installing what the tool needs...
 %PY% -m pip install --quiet --disable-pip-version-check -r requirements.txt
 if errorlevel 1 (
   echo  Couldn't install the requirements. Check the internet connection and run setup again.
   pause
   exit /b 1
 )
+set APP=%PY% "%~dp0invoice_reminder.py"
 
-echo  [2/3] Shop details...
-if not exist .env (
-  copy /y .env.example .env >nul
-  echo        Notepad will open. Put in the shop name, phone and Paybill,
-  echo        then SAVE and CLOSE Notepad to continue.
-  start /wait notepad .env
-) else (
-  echo        .env already exists - keeping your settings.
-)
-if not exist invoices.xlsx %PY% make_sample_invoices.py
-
-echo  [3/3] Checking invoices every morning at 7:30 AM...
-schtasks /Create /TN "Invoice Reminder" /TR "\"%~dp0run_reminders.bat\"" /SC DAILY /ST 07:30 /F >nul
+:settings
+if not exist config.env copy /y config.env.example config.env >nul
+echo  [1/2] Your settings
+echo        Notepad will open. Fill in your shop name, phone and Paybill,
+echo        then SAVE (Ctrl+S) and CLOSE Notepad to continue.
+:edit
+start /wait notepad config.env
+%APP% --check
 if errorlevel 1 (
-  echo  Couldn't create the scheduled task. Right-click setup.bat and choose "Run as administrator".
+  echo  Notepad will open again so you can fix the items above.
+  pause
+  goto :edit
+)
+
+echo  [2/2] Turning on the daily check...
+%APP% --install-schedule
+if errorlevel 1 (
   pause
   exit /b 1
 )
-REM Laptops: Windows only runs tasks on mains power by default. Allow battery, and catch up if it was off.
-powershell -NoProfile -Command "$s = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable; Set-ScheduledTask -TaskName 'Invoice Reminder' -Settings $s" >nul 2>nul
-
 echo.
-echo  Done! Every morning at 7:30 the reminders for overdue invoices
-echo  will be waiting in the Outbox folder.
-echo.
-echo  Next: double-click "check_now.bat" to see today's reminders.
+echo  All set. Double-click run.bat any time to see today's reminders.
 echo.
 pause

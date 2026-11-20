@@ -6,11 +6,18 @@ churches and fundis. It reads the shop's invoice sheet (Excel or CSV) and, for
 every unpaid invoice past its due date, writes a ready-to-send reminder to
 Outbox/ as a .txt file: an email version and a short SMS/WhatsApp version.
 
-    python invoice_reminder.py                    # check invoices.xlsx once
+Everything a shop changes lives in config.env (shop name, Paybill, sheet location,
+check time, email). Nobody needs to open this file.
+
+    python invoice_reminder.py                    # check the sheet in config.env once
+    python invoice_reminder.py --check            # check config.env for mistakes, change nothing
+    python invoice_reminder.py --install-schedule # run every day at CHECK_TIME (Windows Task Scheduler)
+    python invoice_reminder.py --remove-schedule  # stop the daily run
     python invoice_reminder.py --file march.xlsx  # another sheet (or a .csv)
     python invoice_reminder.py --today 2026-11-19 # pretend it's another day (testing)
-    python invoice_reminder.py --notify           # also email the owner today's chase list
-    python invoice_reminder.py --daily 07:30      # keep running, check every day at 07:30
+    python invoice_reminder.py --daily 07:30      # keep a window open, check every day at 07:30
+
+The same commands work on the packaged InvoiceReminder.exe (see build_release.py).
 
 Reminders get firmer as an invoice gets older:
     1-7 days overdue    friendly reminder
@@ -40,13 +47,17 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
-HERE = Path(__file__).resolve().parent
-load_dotenv(HERE / ".env")
+# As a packaged .exe, files live next to the .exe, not in PyInstaller's temp folder.
+FROZEN = getattr(sys, "frozen", False)
+HERE = Path(sys.executable).resolve().parent if FROZEN else Path(__file__).resolve().parent
+CONFIG_FILE = HERE / "config.env"
+load_dotenv(CONFIG_FILE)
+load_dotenv(HERE / ".env")          # older installs used .env; config.env wins if both exist
 
 LOG_FILE = HERE / "automation.log"
 HISTORY_FILE = HERE / "reminder_history.csv"
-DEFAULT_SHEET = HERE / "invoices.xlsx"
-DEFAULT_OUTBOX = HERE / "Outbox"
+TASK_NAME = "Invoice Reminder"
+ON_WINDOWS = os.name == "nt"
 
 logging.basicConfig(filename=LOG_FILE, level=logging.INFO, encoding="utf-8",
                     format="%(asctime)s | %(levelname)s | %(message)s")
@@ -57,17 +68,159 @@ def setting(name, default=""):
     return os.getenv(name, default).strip()
 
 
-SHOP_NAME = setting("SHOP_NAME", "Mlimani Hardware & Building Supplies")
-SHOP_PHONE = setting("SHOP_PHONE", "0700 000 000")
-SHOP_EMAIL = setting("SHOP_EMAIL", "accounts@example.com")
-SIGNED_BY = setting("SIGNED_BY", "Accounts Office")
-MPESA_PAYBILL = setting("MPESA_PAYBILL", "")
-MPESA_TILL = setting("MPESA_TILL", "")
-BANK_DETAILS = setting("BANK_DETAILS", "")
+def folder_setting(name, default):
+    """A path from config.env. Relative paths are next to the tool; C:/Shop/... works too."""
+    value = setting(name, default).strip('"').strip("'")
+    path = Path(value).expanduser()
+    return path if path.is_absolute() else HERE / path
+
+
+def load_settings(config_file=None):
+    """Read config.env into the module settings. Called at start-up (and by tests with their own file)."""
+    global SHOP_NAME, SHOP_PHONE, SHOP_EMAIL, SIGNED_BY, MPESA_PAYBILL, MPESA_TILL, BANK_DETAILS
+    global DEFAULT_SHEET, DEFAULT_OUTBOX, CHECK_TIME, EMAIL_ME
+    if config_file:
+        load_dotenv(config_file, override=True)
+    SHOP_NAME = setting("SHOP_NAME", "Mlimani Hardware & Building Supplies")
+    SHOP_PHONE = setting("SHOP_PHONE", "0700 000 000")
+    SHOP_EMAIL = setting("SHOP_EMAIL", "accounts@example.com")
+    SIGNED_BY = setting("SIGNED_BY", "Accounts Office")
+    MPESA_PAYBILL = setting("MPESA_PAYBILL", "")
+    MPESA_TILL = setting("MPESA_TILL", "")
+    BANK_DETAILS = setting("BANK_DETAILS", "")
+    DEFAULT_SHEET = folder_setting("INVOICE_FILE", "invoices.xlsx")
+    DEFAULT_OUTBOX = folder_setting("OUTBOX_FOLDER", "Outbox")
+    CHECK_TIME = setting("CHECK_TIME", "07:30")
+    if re.fullmatch(r"\d:[0-5]\d", CHECK_TIME):       # people type 7:30; Task Scheduler wants 07:30
+        CHECK_TIME = "0" + CHECK_TIME
+    EMAIL_ME = setting("EMAIL_ME_THE_LIST", "no").lower() in ("yes", "y", "true", "1")
+
+
+load_settings()
 
 
 class ReminderError(Exception):
     """A problem the shop can fix (missing file, wrong columns, bad email login)."""
+
+
+# ------------------------------------------------------------------ config check
+
+# Values in config.env.example that mean "you haven't filled this in yet".
+PLACEHOLDERS = {"SHOP_NAME": "Your Shop Name", "SHOP_PHONE": "07XX XXX XXX",
+                "SHOP_EMAIL": "you@example.com", "GMAIL_ADDRESS": "yourshop@gmail.com",
+                "GMAIL_APP_PASSWORD": "xxxx xxxx xxxx xxxx"}
+EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[a-z]{2,}$", re.I)
+
+
+def check_config(sheet=None):
+    """Return (problems, notes): plain sentences a shop owner can act on, naming the config.env line."""
+    problems, notes = [], []
+    if FROZEN and not CONFIG_FILE.exists():
+        return [f"config.env is missing. It must be in the same folder as InvoiceReminder.exe ({HERE})."], []
+
+    for key, example in PLACEHOLDERS.items():
+        if key.startswith("GMAIL") and not EMAIL_ME:
+            continue                       # email is off, so the Gmail lines don't matter
+        if setting(key) == example:
+            problems.append(f"{key} still says '{example}'. Put in your real details.")
+    if not SHOP_NAME:
+        problems.append("SHOP_NAME is empty. Put the shop name customers know you by.")
+    digits = re.sub(r"\D", "", SHOP_PHONE)
+    if setting("SHOP_PHONE") != PLACEHOLDERS["SHOP_PHONE"] and not 9 <= len(digits) <= 12:
+        problems.append(f"SHOP_PHONE '{SHOP_PHONE}' doesn't look like a phone number (e.g. 0712 345 678).")
+    if SHOP_EMAIL and setting("SHOP_EMAIL") != PLACEHOLDERS["SHOP_EMAIL"] and not EMAIL_RE.match(SHOP_EMAIL):
+        problems.append(f"SHOP_EMAIL '{SHOP_EMAIL}' isn't a valid email address.")
+    for key, value in (("MPESA_PAYBILL", MPESA_PAYBILL), ("MPESA_TILL", MPESA_TILL)):
+        if value and not re.fullmatch(r"\d{5,7}", value):
+            problems.append(f"{key} '{value}' should be 5 to 7 digits only (no spaces or letters).")
+    if not (MPESA_PAYBILL or MPESA_TILL or BANK_DETAILS):
+        notes.append("No MPESA_PAYBILL, MPESA_TILL or BANK_DETAILS set: reminders will say "
+                     "'call us for payment details'.")
+    if not re.fullmatch(r"([01]\d|2[0-3]):[0-5]\d", CHECK_TIME):
+        problems.append(f"CHECK_TIME '{CHECK_TIME}' should be a 24-hour time like 07:30 or 18:00.")
+
+    sheet = Path(sheet) if sheet else DEFAULT_SHEET
+    if not sheet.exists():
+        problems.append(f"Could not find your invoice sheet at {sheet}. "
+                        f"Check that INVOICE_FILE in config.env is correct.")
+    elif sheet.suffix.lower() not in (".xlsx", ".xlsm", ".csv"):
+        problems.append(f"INVOICE_FILE must be an Excel (.xlsx) or .csv file, not '{sheet.suffix}'.")
+
+    if EMAIL_ME:
+        gmail, password = setting("GMAIL_ADDRESS"), setting("GMAIL_APP_PASSWORD").replace(" ", "")
+        if not EMAIL_RE.match(gmail):
+            problems.append("EMAIL_ME_THE_LIST is yes, so GMAIL_ADDRESS needs a real Gmail address.")
+        if setting("GMAIL_APP_PASSWORD") != PLACEHOLDERS["GMAIL_APP_PASSWORD"] and len(password) != 16:
+            problems.append("GMAIL_APP_PASSWORD should be the 16-letter App Password from your Google account "
+                            "(not your normal Gmail password).")
+        if setting("NOTIFY_TO") and not all(EMAIL_RE.match(a.strip()) for a in setting("NOTIFY_TO").split(",")):
+            problems.append(f"NOTIFY_TO '{setting('NOTIFY_TO')}' has an address that isn't valid.")
+    return problems, notes
+
+
+def print_config_report(problems, notes):
+    if problems:
+        print("\nPlease fix these in config.env, then try again:\n")
+        for n, problem in enumerate(problems, start=1):
+            print(f"  {n}. {problem}")
+    else:
+        print(f"\nSettings OK: {SHOP_NAME}, invoices from {DEFAULT_SHEET.name}, checked daily at {CHECK_TIME}"
+              f"{', owner emailed the list' if EMAIL_ME else ''}.")
+    for note in notes:
+        print(f"  Note: {note}")
+    print()
+
+
+# ------------------------------------------------------------------ daily schedule (Windows)
+
+def schedule_command():
+    """What Task Scheduler runs: the .exe, or this script with the current Python."""
+    if FROZEN:
+        return f'"{sys.executable}" --scheduled'
+    return f'"{sys.executable}" "{Path(__file__).resolve()}" --scheduled'
+
+
+def install_schedule(run=None):
+    import subprocess
+    run = run or subprocess.run
+    if not ON_WINDOWS:
+        print(f"Task Scheduler is Windows-only. On Linux/Mac add this with 'crontab -e':\n"
+              f"  {CHECK_TIME[3:]} {CHECK_TIME[:2]} * * * {schedule_command()}")
+        return True
+    result = run(["schtasks", "/Create", "/TN", TASK_NAME, "/TR", schedule_command(),
+                  "/SC", "DAILY", "/ST", CHECK_TIME, "/F"], capture_output=True, text=True)
+    if result.returncode != 0:
+        print("Windows wouldn't create the daily task. Right-click setup.bat and choose "
+              "'Run as administrator', then try again.")
+        log.error(f"schtasks failed: {result.stderr.strip() or result.stdout.strip()}")
+        return False
+    # Laptops: by default Windows only runs tasks on mains power and skips missed ones.
+    run(["powershell", "-NoProfile", "-Command",
+         "$s = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries "
+         f"-StartWhenAvailable; Set-ScheduledTask -TaskName '{TASK_NAME}' -Settings $s"],
+        capture_output=True, text=True)
+    log.info(f"Daily task installed for {CHECK_TIME}: {schedule_command()}")
+    print(f"Done. Invoices will be checked every day at {CHECK_TIME}, even on battery, "
+          f"and missed checks run when the computer is next on.")
+    return True
+
+
+def remove_schedule(run=None):
+    import subprocess
+    run = run or subprocess.run
+    if not ON_WINDOWS:
+        print("Remove the line from 'crontab -e'.")
+        return True
+    result = run(["schtasks", "/Delete", "/TN", TASK_NAME, "/F"], capture_output=True, text=True)
+    print("The daily check is off. Run setup.bat to turn it back on." if result.returncode == 0
+          else "There was no daily check to remove.")
+    log.info("Daily task removed")
+    return True
+
+
+def open_folder(path):
+    if ON_WINDOWS and path.exists():
+        os.startfile(path)   # noqa: S606 - opens Explorer on the Outbox for the shop owner
 
 
 # ------------------------------------------------------------------ columns
@@ -179,8 +332,8 @@ def parse_paid(value):
 def read_rows(path):
     """Return the sheet as a list of rows (lists of cell values)."""
     if not path.exists():
-        raise ReminderError(f"Can't find {path.name}. Put the invoice sheet next to the script "
-                            f"or pass --file path\\to\\sheet.xlsx")
+        raise ReminderError(f"Could not find your invoice sheet ({path}). "
+                            f"Check that INVOICE_FILE in config.env is correct.")
     try:
         if path.suffix.lower() == ".csv":
             with open(path, newline="", encoding="utf-8-sig") as f:
@@ -426,7 +579,10 @@ def write_draft(path, invoice, today, reminded_before=False):
 
 def deliver(overdue, invoices, today, outbox):
     """Write a draft for each overdue invoice not already drafted at this stage."""
-    outbox.mkdir(exist_ok=True)
+    try:
+        outbox.mkdir(parents=True, exist_ok=True)
+    except OSError:
+        raise ReminderError(f"Couldn't create the Outbox folder at {outbox}. Check OUTBOX_FOLDER in config.env.")
     history = load_history()
     new_entries, results = [], {"new": [], "updated": [], "already": [], "cancelled": [], "files": []}
 
@@ -505,7 +661,7 @@ def notify_owner(summary, today, results, outbox):
     password = setting("GMAIL_APP_PASSWORD").replace(" ", "")
     to = setting("NOTIFY_TO") or sender
     if not sender or not password:
-        log.info("Notify skipped: GMAIL_ADDRESS / GMAIL_APP_PASSWORD not set in .env")
+        log.info("Notify skipped: GMAIL_ADDRESS / GMAIL_APP_PASSWORD not set in config.env")
         return "skipped (email not set up)"
     msg = EmailMessage()
     new = results["new"] + results["updated"]
@@ -522,10 +678,11 @@ def notify_owner(summary, today, results, outbox):
             s.login(sender, password)
             s.send_message(msg)
     except smtplib.SMTPAuthenticationError:
-        raise ReminderError("Gmail rejected the login. GMAIL_APP_PASSWORD must be a 16-character App Password.")
+        raise ReminderError("Email login failed. Double-check GMAIL_ADDRESS and the 16-letter "
+                            "GMAIL_APP_PASSWORD in config.env. The drafts are still saved in Outbox.")
     except (smtplib.SMTPException, OSError) as err:
         raise ReminderError(f"Couldn't email the chase list ({type(err).__name__}). "
-                            f"No internet? The drafts are still saved in Outbox.")
+                            f"No internet? The drafts are still saved in Outbox, so nothing is lost.")
     return f"emailed to {to}"
 
 
@@ -554,31 +711,54 @@ def run_automation(sheet, outbox, today=None, notify=False, trigger="manual"):
         print(f"PROBLEM: {err}")
         log.error(f"FAILED - {trigger} | {err}")
         return False
-    except Exception as err:   # never let a surprise crash go unrecorded
-        print(f"UNEXPECTED PROBLEM: {type(err).__name__}: {err}")
+    except Exception as err:   # never show a traceback; keep it in the log for the developer
+        print("Something unexpected went wrong. Nothing was lost. Please send the file "
+              f"automation.log (in {HERE}) to your support contact.")
         log.exception(f"FAILED - {trigger} | unexpected {type(err).__name__}: {err}")
         return False
 
 
 def main():
-    p = argparse.ArgumentParser(description="Draft reminders for overdue invoices.")
-    p.add_argument("--file", type=Path, default=DEFAULT_SHEET, help="invoice sheet (.xlsx or .csv)")
-    p.add_argument("--outbox", type=Path, default=DEFAULT_OUTBOX, help="folder for the drafts")
+    p = argparse.ArgumentParser(description="Draft reminders for overdue invoices. Settings are in config.env.")
+    p.add_argument("--file", type=Path, help="invoice sheet (.xlsx or .csv); default: INVOICE_FILE in config.env")
+    p.add_argument("--outbox", type=Path, help="folder for the drafts; default: OUTBOX_FOLDER in config.env")
     p.add_argument("--today", type=date.fromisoformat, help="pretend today is YYYY-MM-DD (testing)")
-    p.add_argument("--notify", action="store_true", help="email the owner the chase list")
+    p.add_argument("--notify", action="store_true", help="email the owner the chase list (or set EMAIL_ME_THE_LIST)")
+    p.add_argument("--check", action="store_true", help="check config.env for mistakes and stop")
+    p.add_argument("--install-schedule", action="store_true", help="check invoices every day at CHECK_TIME")
+    p.add_argument("--remove-schedule", action="store_true", help="stop the daily check")
+    p.add_argument("--open", action="store_true", help="open the Outbox folder afterwards")
     p.add_argument("--daily", metavar="HH:MM", help="keep running and check every day at this time")
     p.add_argument("--scheduled", action="store_true", help=argparse.SUPPRESS)
     args = p.parse_args()
     trigger = "scheduled" if args.scheduled else "manual"
+    sheet = args.file or DEFAULT_SHEET
+    outbox = args.outbox or DEFAULT_OUTBOX
+
+    if args.remove_schedule:
+        sys.exit(0 if remove_schedule() else 1)
+
+    problems, notes = check_config(sheet)
+    if args.check or problems:
+        print_config_report(problems, notes)
+    if problems:
+        log.error(f"FAILED - {trigger} | config.env needs fixing: " + " / ".join(problems))
+        sys.exit(1)
+    if args.check:
+        sys.exit(0)
+    if args.install_schedule:
+        sys.exit(0 if install_schedule() else 1)
 
     if not args.daily:
-        ok = run_automation(args.file, args.outbox, args.today, args.notify, trigger)
+        ok = run_automation(sheet, outbox, args.today, args.notify or EMAIL_ME, trigger)
+        if args.open:
+            open_folder(outbox)
         sys.exit(0 if ok else 1)
 
     import schedule   # only needed for --daily
     try:
         schedule.every().day.at(args.daily).do(
-            run_automation, args.file, args.outbox, None, args.notify, "daily-loop")
+            run_automation, sheet, outbox, None, args.notify or EMAIL_ME, "daily-loop")
     except schedule.ScheduleValueError:
         sys.exit(f"--daily needs a time like 07:30, not '{args.daily}'")
     print(f"Running. Invoices will be checked every day at {args.daily}. Leave this window open "

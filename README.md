@@ -2,11 +2,59 @@
 
 This tool reads a hardware shop's credit-sales sheet (Excel or CSV) and finds every **unpaid invoice past its due date**. For each one it drafts a polite follow-up and saves it as a `.txt` file in `Outbox/`. Each file holds an email and a short SMS/WhatsApp version (160 characters or less) that includes the M-Pesa Paybill and the invoice number as the account.
 
-Built for AI Masterclass 2, Week 5: Automation Tool for a Business Problem (Option 1: Invoice Reminder Script).
+Built for AI Masterclass 2:
+- **Week 5:** Automation Tool for a Business Problem.
+- **Week 6, Day 28:** Productizing. It is now a client deliverable that needs no Python on the shop's computer.
 
 **Client:** a hardware shop that sells on credit to contractors, schools, churches and fundis.
-**Price:** KES 12,000 setup (see [Pricing](#pricing)).
-**One-page guide for the client:** [CLIENT_GUIDE.md](CLIENT_GUIDE.md)
+**Service description and prices:** [SERVICE.md](SERVICE.md) (KES 12,000 setup + KES 2,500/month).
+**The client's setup guide:** [docs/READ_ME_FIRST.txt](docs/READ_ME_FIRST.txt)
+
+## Day 28: from script to client product
+
+| Lesson step | What was done |
+|---|---|
+| 1. Pick the strongest tool | This one: a real client type, a price, 23 tests, and a path into QuoteKit |
+| 2. No hardcoded values | Everything a shop changes is in **`config.env`**: shop details, Paybill/Till/bank, `INVOICE_FILE`, `OUTBOX_FOLDER`, `CHECK_TIME`, and `EMAIL_ME_THE_LIST` with the Gmail settings. Relative paths sit next to the tool, and full paths such as `C:/Users/Shop/Documents/invoices.xlsx` work too |
+| 3. Setup in 3 steps or fewer | Unzip, double-click `setup.bat` (fill in Notepad), then double-click `run.bat`. `setup.bat` checks the settings and reopens Notepad until they're right, then schedules the daily run at `CHECK_TIME` |
+| 4. Validation and clear errors | `--check` validates every setting **before** anything runs and gives one numbered list naming the exact `config.env` line. A traceback never reaches the client; unexpected errors go to `automation.log` |
+| 5. Service description | [SERVICE.md](SERVICE.md): what it does, who it's for, what it replaces, deliverables, KES prices |
+| Extra: no Python for the client | `build_release.py` makes `InvoiceReminder.exe` (PyInstaller) and zips the client folder |
+
+### Error messages before and after
+
+| Situation | Before (Week 5 or raw Python) | After (what the client reads) |
+|---|---|---|
+| Sheet not where config says | `Can't find invoices.xlsx. Put the invoice sheet next to the script or pass --file` | `Could not find your invoice sheet (C:\Sales\invoices.xlsx). Check that INVOICE_FILE in config.env is correct.` |
+| Settings not filled in | Letters went out signed "Your Shop Name" | `1. SHOP_NAME still says 'Your Shop Name'. Put in your real details.` |
+| Typo in Paybill | `MPESA_PAYBILL=52252B` printed in every letter | `MPESA_PAYBILL '52252B' should be 5 to 7 digits only (no spaces or letters).` |
+| Wrong time format | Task Scheduler error | `CHECK_TIME '7.30am' should be a 24-hour time like 07:30 or 18:00.` (`7:30` is accepted as `07:30`) |
+| Gmail login rejected | `SMTPAuthenticationError: (535, b'Username and Password not accepted')` | `Email login failed. Double-check GMAIL_ADDRESS and the 16-letter GMAIL_APP_PASSWORD in config.env. The drafts are still saved in Outbox.` |
+| Sheet open in Excel | `PermissionError: [Errno 13]` | `invoices.xlsx is locked. Close it in Excel and run again.` |
+| Scheduling blocked | `ERROR: Access is denied.` | `Windows wouldn't create the daily task. Right-click setup.bat and choose 'Run as administrator'` |
+| Anything unexpected | A Python traceback | `Something unexpected went wrong. Nothing was lost. Please send the file automation.log to your support contact.` (The traceback goes in the log for you) |
+
+### Build the client folder
+
+```bash
+pip install pyinstaller
+python build_release.py             # on Windows: builds InvoiceReminder.exe, then the folder and the zip
+python build_release.py --sample    # same, with the 13 sample invoices for a demo
+python build_release.py --no-exe    # ships the .py instead (client needs Python)
+```
+
+```
+release/InvoiceReminder/            ->  release/InvoiceReminder_v1.0.zip
+  InvoiceReminder.exe    the tool, nothing to install
+  config.env             settings template with placeholders the check refuses to run with
+  invoices.xlsx          blank sheet with the right columns and a yes/no dropdown
+  setup.bat              edit settings -> check -> schedule daily
+  run.bat                check now, open the Outbox
+  remove_schedule.bat    turn the daily check off
+  READ ME FIRST.txt      3-step setup plus what every message means
+```
+
+Your own `config.env`, invoices, Outbox, log and history are never copied. The build refuses to package them.
 
 ## The business problem
 
@@ -56,11 +104,11 @@ ROWS TO FIX IN THE SHEET (skipped):
 
 ## Set it up on the shop's computer (3 steps)
 
-1. **Install Python** from [python.org](https://www.python.org/downloads/), ticking **"Add python.exe to PATH"**.
-2. **Double-click `setup.bat`.** Notepad opens: type the shop name, phone and Paybill, then save and close. The tool will now check invoices every morning at 7:30, including on battery, and catches up if the computer was off.
-3. **Put the shop's invoices in `invoices.xlsx`**, then double-click `check_now.bat`. The Outbox folder opens with today's reminders.
+1. **Unzip `InvoiceReminder_v1.0.zip`** somewhere you'll keep it, such as Documents.
+2. **Double-click `setup.bat`.** Notepad opens `config.env`: type the shop name, phone and Paybill, then save and close. If anything is wrong, it says which line to fix and opens Notepad again. Once the settings are right, it schedules the daily check at `CHECK_TIME`. It runs on battery too, and catches up if the computer was off.
+3. **Put the shop's invoices in `invoices.xlsx`**, then double-click `run.bat`. The Outbox folder opens with today's reminders.
 
-To turn off the morning check, double-click `remove_schedule.bat`.
+To turn off the daily check, double-click `remove_schedule.bat`. To set it up from this repo instead of the release folder, run `setup.bat` here: it installs the requirements with Python first.
 
 ## The invoice sheet
 
@@ -84,10 +132,14 @@ If the workbook has a sheet named **Invoices** it is used, otherwise the first s
 
 ```bash
 pip install -r requirements.txt
-python invoice_reminder.py                      # check invoices.xlsx once
+cp config.env.example config.env               # then fill it in
+python invoice_reminder.py --check              # validate config.env, change nothing
+python invoice_reminder.py                      # check the sheet once (add --open to open the Outbox)
+python invoice_reminder.py --install-schedule   # daily at CHECK_TIME via Task Scheduler (prints a cron line on Linux/Mac)
+python invoice_reminder.py --remove-schedule
 python invoice_reminder.py --file march.csv     # another sheet, or a CSV export
 python invoice_reminder.py --today 2026-11-19   # pretend it's another day (testing)
-python invoice_reminder.py --notify             # also email the owner the chase list (Gmail settings in .env)
+python invoice_reminder.py --notify             # email the owner this time (or set EMAIL_ME_THE_LIST=yes)
 python invoice_reminder.py --daily 07:30        # stay running, check every day at 07:30 (schedule library)
 ```
 
@@ -105,7 +157,7 @@ log.info(f"OK - {len(invoices)} invoices read, ...")    # 4. log
 ## Tests (Week 5 test table)
 
 ```bash
-python -m unittest discover tests -v      # 23 tests, all in temp folders (your Outbox is untouched)
+python -m unittest discover tests -v      # 40 tests, all in temp folders (your Outbox and config are untouched)
 ```
 
 | Test | Result | How |
@@ -132,13 +184,13 @@ Internet off, with `--notify`:
 
 ## Pricing
 
-Price it on what it saves, not on how long it took to build.
+The full client-facing version is in [SERVICE.md](SERVICE.md). Price it on what it saves, not on how long it took to build.
 
 | Package | Price | Includes |
 |---|---|---|
-| One-time setup | **KES 12,000** | Install, load the shop's details and sheet, 30 minutes of training |
-| Setup + 3 months support | **KES 18,000** | The above, plus fixes and one change request a month for 3 months |
-| Monthly care | **KES 2,500/mo** | Weekly log check, keep it running, improvements each quarter |
+| Setup | **KES 12,000** | Install with the shop's details and real invoices, 30 minutes of training, 1 month of support |
+| Setup + 3 months | **KES 18,000** | The above, plus fixes and one change request a month for 3 months |
+| Care plan | **KES 2,500/mo** | Weekly log check, keep it running through Windows updates, improvements each quarter |
 
 **Justification:**
 - A shop with about 40 credit invoices a month spends around 3 hours a week checking the book and typing reminders. That is 12 hours a month, and at KES 500/hour of the owner's time it comes to about **KES 6,000 a month**. Setup pays for itself in about 2 months on time alone.
@@ -163,17 +215,20 @@ Money stays as integer cents in QuoteKit. This script uses `Decimal` for the sam
 
 | File | What it is |
 |---|---|
-| `invoice_reminder.py` | The tool: read, find overdue invoices, draft, log, and optionally notify |
-| `make_sample_invoices.py` | Builds the sample `invoices.xlsx` (13 invoices from a fictional Kericho hardware shop) |
+| `invoice_reminder.py` | The tool: config check, read, find overdue invoices, draft, log, notify, schedule |
+| `config.env.example` | The client's settings template, with plain-English notes on every line |
+| `setup.bat`, `run.bat`, `remove_schedule.bat` | Double-click files. They use `InvoiceReminder.exe` if it's there, otherwise Python |
+| `build_release.py` | Builds the `.exe` and the client folder/zip |
+| `SERVICE.md` | Service description: what it does, who it's for, what it replaces, prices, deliverables |
+| `docs/READ_ME_FIRST.txt` | The client's 3-step setup guide and message explanations (shipped as `READ ME FIRST.txt`) |
+| `make_sample_invoices.py` | Builds the sample `invoices.xlsx`, or a blank client template with `--blank` |
 | `invoices.xlsx` | Sample data (all names, emails and phone numbers are made up) |
 | `tests/test_invoice_reminder.py` | 23 tests covering the Week 5 test table |
+| `tests/test_productized.py` | 17 tests for config checks, friendly errors, scheduling and the release folder |
 | `examples/` | Sample drafts and the chase list |
-| `setup.bat`, `check_now.bat`, `run_reminders.bat`, `remove_schedule.bat` | Double-click files for the shop's Windows computer |
-| `.env.example` | Shop details, payment details and optional Gmail settings |
-| `CLIENT_GUIDE.md` | One-page description for the shop owner, with no technical language |
 
-`Outbox/`, `reminder_history.csv`, `automation.log` and `.env` are git-ignored, because on a client's machine they hold real customer data.
+`config.env`, `.env`, `Outbox/`, `reminder_history.csv`, `automation.log`, `build/`, `dist/` and `release/` are git-ignored. On a client's machine they hold passwords and real customer data.
 
 ## Stack
 
-Python 3.10+, openpyxl, python-dotenv, schedule, unittest, and Windows Task Scheduler.
+Python 3.10+, openpyxl, python-dotenv, schedule, unittest, PyInstaller, and Windows Task Scheduler.

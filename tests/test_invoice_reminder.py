@@ -140,7 +140,8 @@ class TestEmptyData(ReminderTestCase):
         ok, logs = self.run_tool(self.tmp / "nope.xlsx")
         self.assertFalse(ok)
         self.assertIn("FAILED", logs[-1])
-        self.assertIn("Can't find nope.xlsx", logs[-1])
+        self.assertIn("Could not find your invoice sheet", logs[-1])
+        self.assertIn("INVOICE_FILE in config.env", logs[-1])
 
     def test_missing_column_explains_what_to_fix(self):
         ok, logs = self.run_tool(self.make_sheet(["Client Name", "Invoice Amount", "Paid"],
